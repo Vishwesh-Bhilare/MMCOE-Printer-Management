@@ -41,7 +41,7 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyC4XrdLKBPplcPX5IfFrcSTAZ1CuGryMb0',
+    apiKey: '<api reducted, use your own>',
     appId: '1:38499636597:web:29ff2b8d2a3ee8b0e02f3c',
     messagingSenderId: '38499636597',
     projectId: 'print-management-app',
