@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAFc7oVrlnlca-rGR6cyx0cvk-LQUifmz8',
+    apiKey: '<api reducted, use your own>',
     appId: '1:38499636597:android:fcd689c0f1425022e02f3c',
     messagingSenderId: '38499636597',
     projectId: 'print-management-app',
@@ -59,7 +59,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCVpgX6oMQnlPywHyDWFFDBL8V5Jjw-Wlk',
+    apiKey: '<api reducted, use your own>',
     appId: '1:38499636597:ios:67b4c1e00cfb8a61e02f3c',
     messagingSenderId: '38499636597',
     projectId: 'print-management-app',
@@ -68,7 +68,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCVpgX6oMQnlPywHyDWFFDBL8V5Jjw-Wlk',
+    apiKey: '<api reducted, use your own>',
     appId: '1:38499636597:ios:67b4c1e00cfb8a61e02f3c',
     messagingSenderId: '38499636597',
     projectId: 'print-management-app',
@@ -77,7 +77,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyC4XrdLKBPplcPX5IfFrcSTAZ1CuGryMb0',
+    apiKey: '<api reducted, use your own>',
     appId: '1:38499636597:web:a5266966f6d826e1e02f3c',
     messagingSenderId: '38499636597',
     projectId: 'print-management-app',
