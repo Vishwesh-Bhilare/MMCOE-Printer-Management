@@ -16,10 +16,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _studentIdController = TextEditingController();
   final _phoneController = TextEditingController();
-  bool _isSignup = false;
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController(); // Add password field
+  final _passwordController = TextEditingController();
+
+  bool _isSignup = false;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.grey[600],
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    if (!_isSignup)
+                      const Text(
+                        'Hint: Your student ID is the first part of your college email before @mmcoe.edu.in',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
                   ],
                 ),
               ),
@@ -74,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your name';
+                            return 'Please enter your full name';
                           }
                           return null;
                         },
@@ -83,15 +91,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _emailController,
                         decoration: const InputDecoration(
-                          labelText: 'Email',
+                          labelText: 'College Email',
                           prefixIcon: Icon(Icons.email),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your email';
+                            return 'Please enter your college email';
                           }
-                          if (!value.contains('@')) {
-                            return 'Please enter a valid email';
+                          if (!value.endsWith('@mmcoe.edu.in')) {
+                            return 'Email must end with @mmcoe.edu.in';
                           }
                           return null;
                         },
@@ -149,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Login Button
+                    // Login / Signup Button
                     if (authProvider.isLoading)
                       const CircularProgressIndicator()
                     else
@@ -157,32 +165,38 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () async {
-                            if (_formKey.currentState!.validate()) {
-                              bool success;
-                              if (_isSignup) {
-                                success = await authProvider.signup(
-                                  _emailController.text,
-                                  _passwordController.text,
-                                  _nameController.text,
-                                  _phoneController.text,
-                                  _studentIdController.text, // Add studentId parameter
-                                );
-                              } else {
-                                success = await authProvider.login(
-                                  '${_studentIdController.text}@university.edu', // Use as email
-                                  _passwordController.text,
-                                );
-                              }
+                            if (!_formKey.currentState!.validate()) return;
 
-                              if (success && context.mounted) {
-                                // Navigate to home screen
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const HomeScreen(),
-                                  ),
-                                );
-                              }
+                            bool success;
+                            if (_isSignup) {
+                              success = await authProvider.signup(
+                                _emailController.text.trim(),
+                                _passwordController.text.trim(),
+                                _nameController.text.trim(),
+                                _phoneController.text.trim(),
+                                _studentIdController.text.trim(),
+                              );
+                            } else {
+                              final email = '${_studentIdController.text.trim()}@mmcoe.edu.in';
+                              success = await authProvider.login(
+                                email,
+                                _passwordController.text.trim(),
+                              );
+                            }
+
+                            if (!success && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(authProvider.error ?? 'Login/Signup failed')),
+                              );
+                            }
+
+                            if (success && context.mounted) {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const HomeScreen(),
+                                ),
+                              );
                             }
                           },
                           child: Padding(

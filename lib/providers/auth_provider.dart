@@ -16,9 +16,9 @@ class AuthProvider with ChangeNotifier {
   String? get error => _error;
 
   AuthProvider() {
-    // Listen to auth state changes
-    _authService.user.listen((user) {
-      _user = user;
+    // Listen to Firebase Auth state changes
+    _authService.user.listen((firebaseUser) {
+      _user = firebaseUser;
       notifyListeners();
     });
   }
@@ -32,7 +32,6 @@ class AuthProvider with ChangeNotifier {
     try {
       final user = await _authService.loginWithEmail(email, password);
       if (user != null) {
-        // Save user to Firestore if not exists
         await _firestoreService.saveUser(user);
         _user = user;
         _isLoading = false;
@@ -48,11 +47,18 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Student signup with Firebase
+  // Student signup with Firebase (college emails only)
   Future<bool> signup(String email, String password, String name, String phone, String studentId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
+    if (!email.endsWith('@mmcoe.edu.in')) {
+      _error = 'Please use your college email ending with @mmcoe.edu.in';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
 
     try {
       final user = await _authService.signUpWithEmail(email, password, name, phone, studentId);

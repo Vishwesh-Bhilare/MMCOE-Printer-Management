@@ -1,6 +1,6 @@
 class AppConstants {
-  static const String appName = 'Student Print System';
-  static const String universityName = 'University Name';
+  static const String appName = 'MMCOE Print Manager';
+  static const String universityName = 'MMCOE, Karvenagar';
 
   // Print settings
   static const double colorPrintCost = 0.50;
