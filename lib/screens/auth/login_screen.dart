@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../student/home_screen.dart';
-import '../printer/printer_login_screen.dart';
+import '../printer/printer_login_screen.dart'; // Add this import
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isSignup = false;
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController(); // Add password field
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +129,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: Icon(Icons.lock),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter password';
+                        }
+                        if (value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
                     const SizedBox(height: 24),
 
                     // Login Button
@@ -142,15 +161,16 @@ class _LoginScreenState extends State<LoginScreen> {
                               bool success;
                               if (_isSignup) {
                                 success = await authProvider.signup(
-                                  _studentIdController.text,
-                                  _phoneController.text,
-                                  _nameController.text,
                                   _emailController.text,
+                                  _passwordController.text,
+                                  _nameController.text,
+                                  _phoneController.text,
+                                  _studentIdController.text, // Add studentId parameter
                                 );
                               } else {
                                 success = await authProvider.login(
-                                  _studentIdController.text,
-                                  _phoneController.text,
+                                  '${_studentIdController.text}@university.edu', // Use as email
+                                  _passwordController.text,
                                 );
                               }
 
@@ -223,6 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController.dispose();
     _nameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 }

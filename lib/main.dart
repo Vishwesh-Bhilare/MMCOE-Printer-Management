@@ -1,61 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart';
-import 'core/constants/app_constants.dart';
+
 import 'core/themes/app_theme.dart';
+import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/print_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'screens/student/home_screen.dart';
+import 'screens/printer/printer_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase only on supported platforms
-  if (kIsWeb ||
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.windows) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } else {
-    // For Linux or other unsupported platforms, skip Firebase
-    debugPrint('Firebase not initialized on this platform.');
-  }
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  runApp(const MyApp());
+  runApp(const PrintManagerApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class PrintManagerApp extends StatelessWidget {
+  const PrintManagerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => PrintProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
+        builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            title: 'Student Printing System',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
-            debugShowCheckedModeBanner: false,
-            home: const LoginScreen(),
-            routes: {
-              AppRoutes.login: (context) => const LoginScreen(),
-            },
+            home: const AppEntryPoint(),
           );
         },
       ),
+    );
+  }
+}
+
+class AppEntryPoint extends StatelessWidget {
+  const AppEntryPoint({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, _) {
+        // Still loading? Show loader
+        if (authProvider.isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // User logged in?
+        if (authProvider.user != null) {
+          if (authProvider.isPrinter) {
+            return const PrinterDashboardScreen();
+          } else if (authProvider.isStudent) {
+            return const HomeScreen();
+          }
+        }
+
+        // Otherwise go to login
+        return const LoginScreen();
+      },
     );
   }
 }

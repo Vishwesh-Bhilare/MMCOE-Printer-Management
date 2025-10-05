@@ -1,27 +1,42 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility that Flutter provides. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:student_printing_system/main.dart';
+import 'firebase_test_config.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() async {
+    // Initialize Firebase mock setup
+    await setupFirebaseMocks();
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsNothing);
+  testWidgets('App launches without crashing', (WidgetTester tester) async {
+    // Build the main app
+    await tester.pumpWidget(const PrintManagerApp());
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
+    // Verify that MaterialApp is present
+    expect(find.byType(MaterialApp), findsOneWidget);
+
+    // Check if the login screen title and button appear
+    expect(find.text('Student Printing System'), findsOneWidget);
+    expect(find.text('LOGIN'), findsOneWidget);
+  });
+
+  testWidgets('Login form validation works', (WidgetTester tester) async {
+    // Build the main app
+    await tester.pumpWidget(const PrintManagerApp());
+
+    await tester.pumpAndSettle();
+
+    // Try to tap on the LOGIN button (without filling form)
+    final loginButton = find.text('LOGIN');
+    expect(loginButton, findsOneWidget);
+
+    await tester.tap(loginButton);
+    await tester.pumpAndSettle();
+
+    // Expect the app to stay on the login screen since no input was entered
+    expect(find.text('Student Printing System'), findsOneWidget);
   });
 }

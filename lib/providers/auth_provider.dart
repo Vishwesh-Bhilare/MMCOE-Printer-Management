@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -6,54 +8,68 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Student login
-  Future<bool> login(String studentId, String phone) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    await Future.delayed(const Duration(seconds: 2));
-
-    _user = UserModel(
-      uid: 'mock-uid-$studentId',
-      studentId: studentId,
-      phone: phone,
-      email: '$studentId@university.edu',
-      name: 'Student $studentId',
-      userType: 'student',
-      createdAt: DateTime.now(),
-    );
-
-    _isLoading = false;
-    notifyListeners();
-    return true;
+  AuthProvider() {
+    // Listen to auth state changes
+    _authService.user.listen((user) {
+      _user = user;
+      notifyListeners();
+    });
   }
 
-  // Student signup
-  Future<bool> signup(String studentId, String phone, String name, String email) async {
+  // Student login with Firebase
+  Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final user = await _authService.loginWithEmail(email, password);
+      if (user != null) {
+        // Save user to Firestore if not exists
+        await _firestoreService.saveUser(user);
+        _user = user;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
 
-    _user = UserModel(
-      uid: 'mock-uid-$studentId',
-      studentId: studentId,
-      phone: phone,
-      email: email,
-      name: name,
-      userType: 'student',
-      createdAt: DateTime.now(),
-    );
-
-    _isLoading = false;
+  // Student signup with Firebase
+  Future<bool> signup(String email, String password, String name, String phone, String studentId) async {
+    _isLoading = true;
+    _error = null;
     notifyListeners();
-    return true;
+
+    try {
+      final user = await _authService.signUpWithEmail(email, password, name, phone, studentId);
+      if (user != null) {
+        await _firestoreService.saveUser(user);
+        _user = user;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   // Printer login
@@ -62,31 +78,25 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Mock printer credentials check
-    if (printerId == 'printer' && password == 'print123') {
-      _user = UserModel(
-        uid: 'mock-printer-uid',
-        studentId: 'PRINTER001',
-        phone: '0000000000',
-        email: 'printer@university.edu',
-        name: 'Printing Station',
-        userType: 'printer',
-        createdAt: DateTime.now(),
-      );
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } else {
-      _error = 'Invalid printer credentials';
+    try {
+      final user = await _authService.printerLogin(printerId, password);
+      if (user != null) {
+        _user = user;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  void logout() {
+  void logout() async {
+    await _authService.logout();
     _user = null;
     notifyListeners();
   }
