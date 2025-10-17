@@ -24,8 +24,12 @@ class PrintPreferences {
     return PrintPreferences(
       isColor: map['isColor'] ?? false,
       isDuplex: map['isDuplex'] ?? true,
-      copies: map['copies'] ?? 1,
-      pages: map['pages'] ?? 1,
+      copies: (map['copies'] is int)
+          ? map['copies']
+          : int.tryParse(map['copies']?.toString() ?? '1') ?? 1,
+      pages: (map['pages'] is int)
+          ? map['pages']
+          : int.tryParse(map['pages']?.toString() ?? '1') ?? 1,
     );
   }
 

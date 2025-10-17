@@ -1,6 +1,5 @@
 name: student_printing_system
 description: A Flutter application for student printing management
-
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -12,21 +11,49 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.2
-  firebase_core: ^2.15.0
-  firebase_auth: ^4.13.0
-  cloud_firestore: ^4.9.0
-  firebase_storage: ^11.3.0
-  firebase_messaging: ^14.2.0
+  shared_preferences: ^2.3.3
+
+  # 🔹 Firebase core & auth (still needed for login)
+  firebase_core: ^4.2.0
+  firebase_auth: ^6.1.1
+  cloud_firestore: ^6.0.3
+
+  # 🔹 State management & utilities
   provider: ^6.1.1
   file_picker: ^10.3.3
-  permission_handler: ^11.0.1
-  intl: ^0.18.1
+  permission_handler: ^12.0.1
+  intl: ^0.20.2
   flutter_local_notifications: ^19.4.2
+  path_provider: ^2.1.5
+  dio: ^5.9.0
+  google_fonts: ^6.3.2
+  lottie: ^3.3.2
+  package_info_plus: ^9.0.0
+
+  # 🔹 Google Drive API (for file uploads)
+  googleapis: ^15.0.0
+  googleapis_auth: ^2.0.0
+  google_sign_in: ^6.2.1
+  url_launcher: ^6.3.0
+
+  # 🔹 PDF rendering (replaced pdf_render)
+  pdfx: ^2.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/drive_service_account.json
+    - assets/lottie/success.json
+    - assets/lottie/empty.json
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"

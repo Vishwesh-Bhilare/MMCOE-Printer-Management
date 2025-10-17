@@ -1,6 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../providers/print_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../models/print_request_model.dart';
 
 class PrintQueueScreen extends StatefulWidget {
@@ -16,81 +21,68 @@ class _PrintQueueScreenState extends State<PrintQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final printProvider = Provider.of<PrintProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
 
-    // Filter requests based on selected status
-    List<PrintRequest> filteredRequests = printProvider.printRequests.where((request) {
+    final allRequests = printProvider.printRequests;
+    final filteredRequests = allRequests.where((r) {
       if (_filterStatus == 'all') return true;
-      return request.status == _filterStatus;
+      return r.status == _filterStatus;
     }).toList();
 
+    final backgroundColor = isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FB);
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final accent = isDark ? Colors.tealAccent : Colors.indigo;
+
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text('Print Queue'),
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.indigo,
+        elevation: 0,
+        title: const Text('Print Queue', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+              color: Colors.white,
+            ),
+            tooltip: 'Toggle Theme',
+            onPressed: () => themeProvider.toggleTheme(),
+          ),
+        ],
       ),
       body: Column(
         children: [
           // Filter Chips
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
-                _FilterChip(
-                  label: 'All',
-                  value: 'all',
-                  groupValue: _filterStatus,
-                  onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value;
-                    });
-                  },
-                ),
-                _FilterChip(
-                  label: 'Pending',
-                  value: 'pending',
-                  groupValue: _filterStatus,
-                  onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value;
-                    });
-                  },
-                ),
-                _FilterChip(
-                  label: 'Ready',
-                  value: 'ready',
-                  groupValue: _filterStatus,
-                  onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value;
-                    });
-                  },
-                ),
-                _FilterChip(
-                  label: 'Collected',
-                  value: 'collected',
-                  groupValue: _filterStatus,
-                  onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value;
-                    });
-                  },
-                ),
+                _buildFilterChip('All', 'all', accent),
+                _buildFilterChip('Pending', 'pending', Colors.orange),
+                _buildFilterChip('Ready', 'ready', Colors.green),
+                _buildFilterChip('Collected', 'collected', Colors.blue),
               ],
             ),
           ),
 
-          // Print Queue List
+          // Request list
           Expanded(
-            child: filteredRequests.isEmpty
-                ? const Center(
+            child: printProvider.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : filteredRequests.isEmpty
+                ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.inbox, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
+                  Icon(Icons.inbox, size: 64, color: Colors.grey[500]),
+                  const SizedBox(height: 12),
                   Text(
-                    'No print requests',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    'No print requests found',
+                    style: TextStyle(
+                        color: isDark ? Colors.white54 : Colors.grey[700]),
                   ),
                 ],
               ),
@@ -99,8 +91,11 @@ class _PrintQueueScreenState extends State<PrintQueueScreen> {
               padding: const EdgeInsets.all(16),
               itemCount: filteredRequests.length,
               itemBuilder: (context, index) {
-                final request = filteredRequests[index];
-                return _PrintQueueItem(request: request);
+                return _PrintQueueItem(
+                  request: filteredRequests[index],
+                  cardColor: cardColor,
+                  isDark: isDark,
+                );
               },
             ),
           ),
@@ -108,163 +103,36 @@ class _PrintQueueScreenState extends State<PrintQueueScreen> {
       ),
     );
   }
-}
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final String groupValue;
-  final Function(String) onChanged;
+  Widget _buildFilterChip(String label, String value, Color color) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isDark = themeProvider.isDarkMode;
 
-  const _FilterChip({
-    required this.label,
-    required this.value,
-    required this.groupValue,
-    required this.onChanged,
-  });
+    final selected = _filterStatus == value;
+    final textColor =
+    selected ? Colors.white : (isDark ? Colors.white70 : Colors.black87);
 
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label),
-      selected: groupValue == value,
-      onSelected: (selected) {
-        onChanged(value);
-      },
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(color: textColor)),
+      selected: selected,
+      backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[200],
+      selectedColor: color,
+      onSelected: (_) => setState(() => _filterStatus = value),
+      pressElevation: 0,
     );
   }
 }
 
 class _PrintQueueItem extends StatelessWidget {
   final PrintRequest request;
+  final Color cardColor;
+  final bool isDark;
 
-  const _PrintQueueItem({required this.request});
-
-  @override
-  Widget build(BuildContext context) {
-    final printProvider = Provider.of<PrintProvider>(context, listen: false);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    request.fileName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(request.status),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    request.status.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Print ID: ${request.printId}'),
-            Text('Student ID: ${request.studentId}'),
-            Text('Pages: ${request.totalPages} • Copies: ${request.preferences.copies}'),
-            Text('Type: ${request.preferences.isColor ? 'Color' : 'B/W'} • Sides: ${request.preferences.isDuplex ? 'Double' : 'Single'}'),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '₹${request.totalCost.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  _formatDate(request.createdAt),
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Action Buttons
-            if (request.status == 'pending')
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await printProvider.updatePrintStatus(request.id, 'ready');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Marked as ready for collection'),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                      ),
-                      child: const Text('MARK AS READY'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        await printProvider.updatePrintStatus(request.id, 'collected');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Marked as collected'),
-                          ),
-                        );
-                      },
-                      child: const Text('MARK COLLECTED'),
-                    ),
-                  ),
-                ],
-              ),
-
-            if (request.status == 'ready')
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    await printProvider.updatePrintStatus(request.id, 'collected');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Marked as collected'),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                  ),
-                  child: const Text('MARK AS COLLECTED'),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  const _PrintQueueItem({
+    required this.request,
+    required this.cardColor,
+    required this.isDark,
+  });
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -280,6 +148,187 @@ class _PrintQueueItem extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    return '${date.day}/${date.month}/${date.year} '
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _downloadFile(BuildContext context, String url) async {
+    final dio = Dio();
+
+    try {
+      final downloadsDir = await getDownloadsDirectory();
+      final savePath = '${downloadsDir!.path}/${request.studentId}_${request.fileName}';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading...'), duration: Duration(seconds: 2)),
+      );
+
+      await dio.download(url, savePath);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved to Downloads: ${request.fileName}'),
+          backgroundColor: Colors.green,
+          action: SnackBarAction(
+            label: 'Open',
+            textColor: Colors.white,
+            onPressed: () async {
+              final file = File(savePath);
+              if (await file.exists()) {
+                await launchUrl(Uri.file(savePath));
+              }
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      try {
+        final uri = Uri.parse(url);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _getStatusColor(request.status);
+    final studentId = request.studentId.contains('@')
+        ? request.studentId.split('@').first
+        : request.studentId;
+    final revenue = request.totalPages * 2;
+    final printProvider = Provider.of<PrintProvider>(context, listen: false);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black54 : color.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  request.fileName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  request.status.toUpperCase(),
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Text('Student: $studentId',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
+          Text('Pages: ${request.totalPages} | Copies: ${request.preferences.copies}',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
+          Text(
+            '${request.preferences.isColor ? 'Color' : 'B/W'} • ${request.preferences.isDuplex ? 'Double' : 'Single'}',
+            style: TextStyle(color: isDark ? Colors.white60 : Colors.grey[700]),
+          ),
+          const SizedBox(height: 6),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('₹$revenue',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.tealAccent : Colors.indigo,
+                  )),
+              Text(
+                _formatDate(request.createdAt),
+                style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[600], fontSize: 12),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              InkWell(
+                onTap: () => _downloadFile(context, request.fileUrl),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: isDark ? Colors.tealAccent : Colors.indigo),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.download,
+                          color: isDark ? Colors.tealAccent : Colors.indigo, size: 18),
+                      const SizedBox(width: 6),
+                      Text('Download',
+                          style: TextStyle(
+                              color: isDark ? Colors.tealAccent : Colors.indigo,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              PopupMenuButton<String>(
+                icon: Icon(Icons.more_vert, color: isDark ? Colors.white70 : Colors.black87),
+                onSelected: (value) async {
+                  await printProvider.updatePrintStatus(request.id, value);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Marked as $value'),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'pending', child: Text('Mark Pending')),
+                  PopupMenuItem(value: 'ready', child: Text('Mark Ready')),
+                  PopupMenuItem(value: 'collected', child: Text('Mark Collected')),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

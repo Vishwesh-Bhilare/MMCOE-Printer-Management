@@ -1,13 +1,14 @@
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:student_printing_system/services/google_drive_service.dart';
 
 typedef UploadProgressCallback = void Function(double progress);
 
+/// Handles file storage logic for the app.
+/// Internally uses Google Drive via a service account.
 class StorageService {
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final GoogleDriveService _driveService = GoogleDriveService();
 
-  /// Upload a PDF file and return its download URL.
-  /// [onProgress] reports upload progress as a value between 0.0 and 1.0
+  /// Upload a PDF file to Google Drive and return its download URL.
   Future<String> uploadPdf(
       File file,
       String fileName,
@@ -15,36 +16,34 @@ class StorageService {
         UploadProgressCallback? onProgress,
       }) async {
     try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filePath = 'print_requests/$studentId/${timestamp}_$fileName';
+      final downloadUrl = await _driveService.uploadFile(
+        file: file,
+        originalFileName: fileName,
+        studentId: studentId,
+        onProgress: onProgress,
+      );
 
-      final ref = _storage.ref().child(filePath);
-      final uploadTask = ref.putFile(file);
-
-      // Listen for progress
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        if (onProgress != null && snapshot.totalBytes > 0) {
-          final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-          onProgress(progress);
-        }
-      });
-
-      // Wait until complete
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
       return downloadUrl;
     } catch (e) {
-      throw Exception('Failed to upload file: $e');
+      throw Exception('Failed to upload file to Google Drive: $e');
     }
   }
 
-  /// Delete a file from Firebase Storage using its download URL
+  /// Delete a file from Google Drive using its public URL.
   Future<void> deleteFile(String fileUrl) async {
     try {
-      final ref = _storage.refFromURL(fileUrl);
-      await ref.delete();
+      // Extract file ID from URL: e.g. https://drive.google.com/uc?id=<ID>
+      final regex = RegExp(r'id=([a-zA-Z0-9_-]+)');
+      final match = regex.firstMatch(fileUrl);
+
+      if (match != null) {
+        final fileId = match.group(1)!;
+        await _driveService.deleteFile(fileId);
+      } else {
+        print('⚠️ No valid file ID found in URL: $fileUrl');
+      }
     } catch (e) {
-      print('Error deleting file: $e');
+      print('❌ Error deleting Google Drive file: $e');
     }
   }
 }

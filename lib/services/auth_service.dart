@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../utils/firestore_date.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -115,15 +116,30 @@ class AuthService {
   }
 
   // Printer login (from Firestore printers collection)
+  // Printer login (from Firestore printers collection)
   Future<UserModel?> printerLogin(String printerId, String password) async {
     try {
       final doc = await _firestore.collection('printers').doc(printerId).get();
 
-      if (doc.exists && doc.data()?['password'] == password) {
-        return UserModel.fromMap(doc.data()!);
-      } else {
+      if (!doc.exists) {
+        throw Exception('Printer not found');
+      }
+
+      final data = doc.data()!;
+      if (data['password'] != password) {
         throw Exception('Invalid printer credentials');
       }
+
+      // ✅ Create UserModel manually instead of parsing via fromMap()
+      return UserModel(
+        uid: printerId,
+        studentId: printerId,
+        email: '',
+        phone: '',
+        name: data['name'] ?? 'Printer Station',
+        userType: 'printer',
+        createdAt: parseFirestoreDate(data['createdAt']),
+      );
     } catch (e) {
       throw Exception('Printer login failed: $e');
     }

@@ -1,63 +1,123 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
 import '../models/print_request_model.dart';
+import '../models/print_preferences_model.dart';
+import '../models/user_model.dart';
 
 class PrintProvider with ChangeNotifier {
-  List<PrintRequest> _printRequests = [];
-  bool _isLoading = false;
-  String? _error;
-
   final FirestoreService _firestoreService = FirestoreService();
   final StorageService _storageService = StorageService();
 
+  List<PrintRequest> _printRequests = [];
+  bool _isLoading = false;
+  String? _error;
+  StreamSubscription<List<PrintRequest>>? _subscription;
+
+  // 📊 Getters
   List<PrintRequest> get printRequests => _printRequests;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Load print requests for student
-  Future<void> loadStudentPrintRequests(String studentId) async {
-    _isLoading = true;
-    notifyListeners();
+  // 🧩 --- REAL-TIME STREAMING ---
 
-    try {
-      _printRequests = await _firestoreService.getPrintRequestsByStudent(studentId);
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-    }
+  /// 🔹 Listen to a student's print requests in real time
+  void startListeningToStudent(String studentId) {
+    stopListening();
+    _setLoading(true);
+
+    _subscription = _firestoreService
+        .streamPrintRequestsByStudent(studentId)
+        .listen((requests) {
+      _printRequests = requests;
+      _setLoading(false);
+    }, onError: (error) {
+      _setError(error.toString());
+    });
   }
 
-  // Load all print requests for printer
-  Future<void> loadAllPrintRequests() async {
-    _isLoading = true;
-    notifyListeners();
+  /// 🔹 Listen to all print requests (for printers)
+  void startListeningToAll() {
+    stopListening();
+    _setLoading(true);
 
-    try {
-      _printRequests = await _firestoreService.getAllPrintRequests();
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-    }
+    _subscription = _firestoreService.streamAllPrintRequests().listen(
+          (requests) {
+        _printRequests = requests;
+        _setLoading(false);
+      },
+      onError: (error) {
+        _setError(error.toString());
+      },
+    );
   }
 
-  // Submit new print request
-  Future<void> submitPrintRequest(PrintRequest request) async {
-    _isLoading = true;
-    notifyListeners();
+  /// 🔹 Stop Firestore listener to avoid memory leaks
+  void stopListening() {
+    _subscription?.cancel();
+    _subscription = null;
+  }
 
+  // 🧾 --- SUBMISSION & UPLOAD LOGIC ---
+
+  /// ✅ Handles uploading the PDF + saving print request in Firestore
+  Future<void> uploadPrintRequest({
+    required PlatformFile file,
+    required PrintPreferences preferences,
+    required UserModel user,
+    int? pages, // 👈 Optional now
+    Function(double)? onProgress, // 👈 Optional callback
+  }) async {
     try {
-      // Get next print ID
+      _setLoading(true);
+
+      // Upload file to Firebase Storage
+      final fileUrl = await _storageService.uploadPdf(
+        File(file.path!),
+        file.name,
+        user.uid, // ✅ match Firebase Auth UID
+        onProgress: onProgress,
+      );
+
+      // Generate sequential print ID
       final printId = await _firestoreService.getNextPrintId();
 
-      // Update request with print ID
-      final updatedRequest = PrintRequest(
+      // Use a safe default (1 page) if page count is missing
+      final int totalPages = (pages ?? 1) * preferences.copies;
+
+      // Create print request object
+      final request = PrintRequest(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        studentId: user.uid,
+        printId: printId.toString(),
+        fileName: file.name,
+        fileUrl: fileUrl,
+        preferences: preferences,
+        status: 'pending',
+        createdAt: DateTime.now(),
+        totalCost: preferences.calculateCost(),
+        totalPages: totalPages,
+      );
+
+      await _firestoreService.savePrintRequest(request);
+    } catch (e) {
+      _setError("Error uploading print request: $e");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// 🔹 Manually submit already created request (used internally)
+  Future<void> submitPrintRequest(PrintRequest request) async {
+    _setLoading(true);
+    try {
+      final printId = await _firestoreService.getNextPrintId();
+
+      final newRequest = PrintRequest(
         id: request.id,
         studentId: request.studentId,
         printId: printId.toString(),
@@ -70,43 +130,58 @@ class PrintProvider with ChangeNotifier {
         totalPages: request.totalPages,
       );
 
-      await _firestoreService.savePrintRequest(updatedRequest);
-
-      // Reload requests
-      await loadStudentPrintRequests(request.studentId);
+      await _firestoreService.savePrintRequest(newRequest);
     } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
+      _setError(e.toString());
       rethrow;
+    } finally {
+      _setLoading(false);
     }
   }
 
-  // Update print status
+  /// 🔹 Bulk update request statuses
+  Future<void> markAllAs(String status) async {
+    try {
+      for (final request in _printRequests) {
+        await updatePrintStatus(request.id, status);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error marking all as $status: $e");
+    }
+  }
+
+  /// 🔹 Update single request status
   Future<void> updatePrintStatus(String requestId, String status) async {
     try {
       await _firestoreService.updatePrintStatus(requestId, status);
-
-      // Update local state
-      final index = _printRequests.indexWhere((req) => req.id == requestId);
-      if (index != -1) {
-        final updatedRequest = _printRequests[index].copyWith(
-          status: status,
-          printedAt: status == 'ready' ? DateTime.now() : _printRequests[index].printedAt,
-          collectedAt: status == 'collected' ? DateTime.now() : _printRequests[index].collectedAt,
-        );
-        _printRequests[index] = updatedRequest;
-        notifyListeners();
-      }
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      _setError(e.toString());
       rethrow;
     }
   }
 
+  /// 🔹 Clear error
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  // ⚙️ --- HELPERS ---
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+
+  void _setError(String value) {
+    _error = value;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    stopListening();
+    super.dispose();
   }
 }

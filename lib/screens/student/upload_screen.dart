@@ -2,11 +2,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../providers/print_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../services/storage_service.dart';
-import '../../models/print_request_model.dart';
-import '../../models/print_preferences_model.dart';
+import 'package:pdfx/pdfx.dart';
+
+import 'package:student_printing_system/providers/auth_provider.dart';
+import 'package:student_printing_system/providers/theme_provider.dart';
+import 'package:student_printing_system/providers/print_provider.dart';
+import 'package:student_printing_system/models/print_preferences_model.dart';
+import 'package:student_printing_system/models/user_model.dart';
+import 'package:student_printing_system/screens/settings/settings_screen.dart';
+import 'package:student_printing_system/screens/student/upload_success_screen.dart';
+import 'package:student_printing_system/screens/student/upload_failed_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -15,7 +20,8 @@ class UploadScreen extends StatefulWidget {
   State<UploadScreen> createState() => _UploadScreenState();
 }
 
-class _UploadScreenState extends State<UploadScreen> {
+class _UploadScreenState extends State<UploadScreen>
+    with SingleTickerProviderStateMixin {
   bool _isColor = false;
   bool _isDuplex = true;
   int _copies = 1;
@@ -23,112 +29,195 @@ class _UploadScreenState extends State<UploadScreen> {
   PlatformFile? _selectedFile;
   bool _isUploading = false;
   double _uploadProgress = 0.0;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
-  final StorageService _storageService = StorageService();
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut);
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final printProvider = Provider.of<PrintProvider>(context);
-    final authProvider = Provider.of<AuthProvider>(context);
+    final auth = Provider.of<AuthProvider>(context);
+    final theme = Provider.of<ThemeProvider>(context);
+    final isDark = theme.isDarkMode;
+    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FB);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload Document')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildFileSection(),
-            const SizedBox(height: 16),
-            _buildPrintPreferences(),
-            const SizedBox(height: 24),
-            if (printProvider.isLoading || _isUploading)
-              const Center(child: CircularProgressIndicator())
-            else
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _selectedFile == null
-                      ? null
-                      : () => _submitPrintRequest(printProvider, authProvider),
-                  child: const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text('SUBMIT PRINT REQUEST'),
-                  ),
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.indigo,
+        title: const Text(
+          'Upload Document',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+              color: Colors.white,
+            ),
+            onPressed: () => theme.toggleTheme(),
+          ),
+        ],
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 🧾 Title (no Hero)
+              Text(
+                'Upload Document',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.indigo,
                 ),
               ),
-          ],
+              const SizedBox(height: 20),
+              _buildFileCard(isDark),
+              const SizedBox(height: 16),
+              _buildPreferences(isDark),
+              const SizedBox(height: 20),
+              if (_isUploading)
+                Column(
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Uploading... ${(_uploadProgress * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.cloud_upload_rounded),
+                    label: const Text(
+                      'SUBMIT REQUEST',
+                      style: TextStyle(fontFamily: 'Poppins'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor:
+                      isDark ? Colors.tealAccent[700] : Colors.indigo,
+                    ),
+                    onPressed: _selectedFile == null || _isUploading
+                        ? null
+                        : () => _submit(printProvider, auth),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFileSection() {
+  Widget _buildFileCard(bool isDark) {
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     return Card(
+      color: cardColor,
+      elevation: isDark ? 1 : 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Select Document', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
+            const Text(
+              "Select Document",
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
             if (_selectedFile != null)
               Container(
-                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.green[50],
+                  color:
+                  isDark ? Colors.teal.withOpacity(0.1) : Colors.green[50],
+                  border: Border.all(
+                      color: isDark ? Colors.tealAccent : Colors.green),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.description, color: Colors.green),
-                    const SizedBox(width: 8),
+                    Icon(Icons.description,
+                        color: isDark ? Colors.tealAccent : Colors.green),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: Text(_selectedFile!.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        _selectedFile!.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                      ),
                     ),
-                    Text('${(_selectedFile!.size / 1024 / 1024).toStringAsFixed(2)} MB', style: const TextStyle(color: Colors.grey)),
-                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: _isUploading
                           ? null
-                          : () => setState(() { _selectedFile = null; _pages = 1; }),
-                      child: const Icon(Icons.close, color: Colors.red),
+                          : () => setState(() => _selectedFile = null),
+                      child: Icon(Icons.close,
+                          color: isDark ? Colors.red[300] : Colors.red),
                     ),
                   ],
                 ),
               )
             else
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(8)),
-                child: Column(
-                  children: const [
-                    Icon(Icons.cloud_upload, size: 48, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text('No file selected', style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _isUploading ? null : _pickFile,
+              OutlinedButton.icon(
                 icon: const Icon(Icons.attach_file),
-                label: const Text('Choose PDF File'),
-              ),
-            ),
-            if (_isUploading)
-              Column(
-                children: [
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: _uploadProgress),
-                  const SizedBox(height: 8),
-                  Text('Uploading: ${(_uploadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
+                label: const Text(
+                  "Choose PDF File",
+                  style: TextStyle(fontFamily: 'Poppins'),
+                ),
+                onPressed: _isUploading ? null : _pickFile,
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                      color: isDark ? Colors.tealAccent : Colors.indigo),
+                ),
               ),
           ],
         ),
@@ -136,131 +225,180 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  Widget _buildPrintPreferences() {
+  Widget _buildPreferences(bool isDark) {
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     return Card(
+      color: cardColor,
+      elevation: isDark ? 1 : 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Print Preferences', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          const Text('Print Type'),
-          Row(
-            children: [
-              Expanded(
-                child: RadioListTile<bool>(
-                  title: const Text('Black & White'),
-                  value: false,
-                  groupValue: _isColor,
-                  onChanged: (value) => setState(() => _isColor = value!),
-                ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Print Preferences",
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              Expanded(
-                child: RadioListTile<bool>(
-                  title: const Text('Color (Coming Soon)', style: TextStyle(color: Colors.grey)),
-                  value: true,
-                  groupValue: _isColor,
-                  onChanged: null,
-                ),
+            ),
+            const Divider(),
+            Text(
+              "Sides",
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: isDark ? Colors.white70 : Colors.black87,
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text('Sides'),
-          Row(
-            children: [
-              Expanded(
-                child: RadioListTile<bool>(
-                  title: const Text('Single Sided'),
-                  value: false,
-                  groupValue: _isDuplex,
-                  onChanged: (value) => setState(() => _isDuplex = value!),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<bool>(
+                    value: false,
+                    groupValue: _isDuplex,
+                    activeColor: isDark ? Colors.tealAccent : Colors.indigo,
+                    title: const Text("Single Sided",
+                        style: TextStyle(fontFamily: 'Poppins')),
+                    onChanged: (v) => setState(() => _isDuplex = v!),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: RadioListTile<bool>(
-                  title: const Text('Double Sided'),
-                  value: true,
-                  groupValue: _isDuplex,
-                  onChanged: (value) => setState(() => _isDuplex = value!),
+                Expanded(
+                  child: RadioListTile<bool>(
+                    value: true,
+                    groupValue: _isDuplex,
+                    activeColor: isDark ? Colors.tealAccent : Colors.indigo,
+                    title: const Text("Double Sided",
+                        style: TextStyle(fontFamily: 'Poppins')),
+                    onChanged: (v) => setState(() => _isDuplex = v!),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Text('Copies:'),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Slider(
-                  value: _copies.toDouble(),
-                  min: 1,
-                  max: 10,
-                  divisions: 9,
-                  label: _copies.toString(),
-                  onChanged: (value) => setState(() => _copies = value.toInt()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text(
+                  "Copies:",
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
                 ),
-              ),
-              Text('$_copies'),
-            ],
-          ),
-        ]),
+                Expanded(
+                  child: Slider(
+                    value: _copies.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: _copies.toString(),
+                    activeColor: isDark ? Colors.tealAccent : Colors.indigo,
+                    onChanged: (val) => setState(() => _copies = val.toInt()),
+                  ),
+                ),
+                Text(
+                  '$_copies',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: isDark ? Colors.white70 : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _pickFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf'], allowMultiple: false);
-      if (result != null && result.files.single.extension == 'pdf') {
-        setState(() { _selectedFile = result.files.single; _pages = 5 + (DateTime.now().millisecond % 20); });
+      FilePickerResult? res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (res != null && res.files.single.path != null) {
+        final file = File(res.files.single.path!);
+        final pdfDoc = await PdfDocument.openFile(file.path);
+        setState(() {
+          _selectedFile = res.files.single;
+          _pages = pdfDoc.pagesCount;
+        });
+        await pdfDoc.close();
       }
     } catch (e) {
-      _showError('Error picking file: $e');
+      debugPrint("Error picking file: $e");
     }
   }
 
-  Future<void> _submitPrintRequest(PrintProvider printProvider, AuthProvider authProvider) async {
-    if (_selectedFile == null || authProvider.user == null) return;
+  Future<void> _submit(PrintProvider printProvider, AuthProvider auth) async {
+    if (_selectedFile == null || _isUploading) return;
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0.0;
+    });
 
-    setState(() { _isUploading = true; _uploadProgress = 0.0; });
+    final prefs = PrintPreferences(
+      isColor: _isColor,
+      isDuplex: _isDuplex,
+      copies: _copies,
+      pages: _pages,
+    );
+
+    final user = auth.user as UserModel;
 
     try {
-      final fileUrl = await _storageService.uploadPdf(
-        File(_selectedFile!.path!),
-        _selectedFile!.name,
-        authProvider.user!.uid,  // <-- Use UID here
+      await printProvider.uploadPrintRequest(
+        file: _selectedFile!,
+        preferences: prefs,
+        user: user,
+        pages: _pages,
+        onProgress: (progress) {
+          setState(() => _uploadProgress = progress);
+        },
       );
 
-      final preferences = PrintPreferences(isColor: _isColor, isDuplex: _isDuplex, copies: _copies, pages: _pages);
-
-      final request = PrintRequest(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        studentId: authProvider.user!.uid,  // <-- UID stored here
-        printId: '0000',
-        fileName: _selectedFile!.name,
-        fileUrl: fileUrl,
-        preferences: preferences,
-        status: 'pending',
-        createdAt: DateTime.now(),
-        totalCost: preferences.calculateCost(),
-        totalPages: _pages * _copies,
-      );
-
-      await printProvider.submitPrintRequest(request);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Print request submitted successfully!')));
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      _showError('Error submitting request: $e');
-    } finally {
+      if (!mounted) return;
       setState(() => _isUploading = false);
-    }
-  }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 600),
+          pageBuilder: (_, __, ___) => const UploadSuccessScreen(),
+          transitionsBuilder: (context, animation, secondary, child) {
+            const curve = Curves.easeInOut;
+            final tween = Tween(begin: const Offset(0, 0.1), end: Offset.zero)
+                .chain(CurveTween(curve: curve));
+            return FadeTransition(
+              opacity: animation,
+              child:
+              SlideTransition(position: animation.drive(tween), child: child),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploading = false);
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 600),
+          pageBuilder: (_, __, ___) => UploadFailedScreen(
+            errorMessage: e.toString(),
+            onRetry: () => Navigator.pop(context),
+          ),
+          transitionsBuilder: (context, animation, secondary, child) {
+            const curve = Curves.easeInOut;
+            final tween = Tween(begin: const Offset(0, 0.1), end: Offset.zero)
+                .chain(CurveTween(curve: curve));
+            return FadeTransition(
+              opacity: animation,
+              child:
+              SlideTransition(position: animation.drive(tween), child: child),
+            );
+          },
+        ),
+      );
+    }
   }
 }

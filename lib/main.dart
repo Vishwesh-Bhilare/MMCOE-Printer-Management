@@ -1,21 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 
+// Core imports
 import 'core/themes/app_theme.dart';
 import 'firebase_options.dart';
+import 'core/constants/app_constants.dart';
+
+// Providers
 import 'providers/auth_provider.dart';
 import 'providers/print_provider.dart';
 import 'providers/theme_provider.dart';
+
+// Screens
 import 'screens/auth/login_screen.dart';
 import 'screens/student/home_screen.dart';
 import 'screens/printer/printer_dashboard_screen.dart';
+import 'screens/printer/printer_home_screen.dart'; // ✅ new printer home
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // ✅ Set transparent status bar with dynamic brightness
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
   );
 
   runApp(const PrintManagerApp());
@@ -34,13 +51,32 @@ class PrintManagerApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'Student Printing System',
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
-            home: const AppEntryPoint(),
+          final isDark = themeProvider.isDarkMode;
+
+          return AnimatedTheme(
+            data: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+            duration: const Duration(milliseconds: 300), // smooth fade
+            curve: Curves.easeInOut,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'Student Printing System',
+
+              // Themed configurations
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeProvider.themeMode,
+
+              // ✅ Routes
+              routes: {
+                AppRoutes.login: (context) => const LoginScreen(),
+                AppRoutes.home: (context) => const HomeScreen(),
+                AppRoutes.printerDashboard: (context) => const PrinterDashboardScreen(),
+                '/printer_home': (context) => const PrinterHomeScreen(), // ✅ added
+              },
+
+              // Entry point
+              home: const AppEntryPoint(),
+            ),
           );
         },
       ),
@@ -67,10 +103,7 @@ class _AppEntryPointState extends State<AppEntryPoint> {
 
   Future<void> _initialize() async {
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      // Wait until the first Firebase user state is determined
-      await Future.delayed(const Duration(milliseconds: 300)); // optional small delay
-      // Firebase Auth will already trigger authProvider.user via stream
+      await Future.delayed(const Duration(milliseconds: 300));
       _initialized = true;
       setState(() {});
     } catch (_) {
@@ -98,13 +131,13 @@ class _AppEntryPointState extends State<AppEntryPoint> {
       );
     }
 
-    // Show splash/loading screen while initializing or listening to auth
+    // Splash / Loading
     if (!_initialized || authProvider.isLoading) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text('Loading...'),
@@ -114,16 +147,16 @@ class _AppEntryPointState extends State<AppEntryPoint> {
       );
     }
 
-    // User logged in?
+    // Role-based navigation
     if (authProvider.user != null) {
       if (authProvider.isPrinter) {
-        return const PrinterDashboardScreen();
+        return const PrinterHomeScreen(); // ✅ Printer
       } else if (authProvider.isStudent) {
-        return const HomeScreen();
+        return const HomeScreen(); // ✅ Student
       }
     }
 
-    // Otherwise go to login
+    // Default: Login
     return const LoginScreen();
   }
 }
